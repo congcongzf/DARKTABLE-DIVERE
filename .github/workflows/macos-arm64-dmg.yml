@@ -1,0 +1,60 @@
+name: macOS ARM64 DMG
+
+# Manual build of an Apple Silicon (arm64) darktable-DiVERE .dmg.
+# Run from the Actions tab -> "Run workflow".
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 360
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "14.0"
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+          fetch-depth: 1
+
+      - name: Fetch needed submodules
+        run: |
+          git submodule init
+          git config submodule.src/tests/integration.update none
+          git submodule update
+
+      - name: Install Homebrew dependencies
+        # NOTE: the runner image ships EOL openssl@1.1 with a stale
+        # /opt/homebrew/bin/openssl symlink (brew unlink reports
+        # "0 symlinks removed" -- it is orphaned, not tracked). It blocks
+        # `brew upgrade` from linking openssl@3, so remove the keg and the
+        # stale symlink outright before upgrading.
+        run: |
+          brew update
+          brew uninstall --force openssl@1.1 || true
+          rm -f /opt/homebrew/bin/openssl
+          brew upgrade
+          brew bundle install --file .ci/Brewfile --verbose
+
+      - name: Build and install (Release)
+        run: ./packaging/macosx/2_build_hb_darktable_default.sh
+
+      - name: Create app bundle
+        run: ./packaging/macosx/3_make_hb_darktable_package.sh
+
+      - name: Create DMG
+        run: |
+          # 4_make_hb_darktable_dmg.sh names the image from `git describe --tags --match release-*`
+          git tag release-5.6.1+divere
+          ./packaging/macosx/4_make_hb_darktable_dmg.sh
+
+      - name: Smoke test
+        run: |
+          ./build/macosx/package/darktable.app/Contents/MacOS/darktable --version || true
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: darktable-divere-macos-arm64
+          path: build/macosx/*.dmg
+          if-no-files-found: error

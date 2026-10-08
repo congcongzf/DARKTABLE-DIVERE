@@ -146,6 +146,11 @@ endif(GMIC_FOUND)
 add_iop(toneequal "toneequal.c" DEFAULT_VISIBLE)
 add_iop(filmicrgb "filmicrgb.c")
 add_iop(negadoctor "negadoctor.c")
+# negadoctor calls dt_ai_* (Deep White Balance). Those symbols live in the
+# static darktable_ai lib; libdarktable hides them (visibility=hidden), so the
+# plugin must link darktable_ai itself, otherwise linking the bundle fails
+# with undefined symbols on macOS.
+target_link_libraries(negadoctor darktable_ai)
 add_iop(channelmixerrgb "channelmixerrgb.c" "../chart/common.c")
 add_iop(censorize "censorize.c")
 add_iop(colorbalancergb "colorbalancergb.c")
